@@ -18,4 +18,5 @@
         </activity>
     </application>
 
+    <meta-data android:name="android.notch_support" android:value="true" />
 </manifest>

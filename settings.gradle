@@ -1,0 +1,4 @@
+include ':screendeal'
+include  ':app'
+include ':storagebox'
+rootProject.name = "storagebox"

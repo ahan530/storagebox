@@ -3,7 +3,8 @@ package com.ahan.storagebox.request;
 import android.os.Environment;
 import android.provider.MediaStore;
 
-import com.ywy.myshopping.utils.fileload.annotion.DbFied;
+
+import com.ahan.storagebox.annotion.DbFied;
 
 import java.io.File;
 
