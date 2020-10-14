@@ -1,5 +1,6 @@
 package com.ahan.screendeal
 
+import android.app.Activity
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Point
@@ -8,6 +9,8 @@ import android.util.Log
 import android.view.*
 import androidx.annotation.NonNull
 import androidx.annotation.Nullable
+import androidx.core.content.ContextCompat
+import java.lang.reflect.Field
 
 /**
  * CreateTime:2020/10/13
@@ -16,40 +19,56 @@ import androidx.annotation.Nullable
  **/
 object BaseSreenUtils {
 
-    const val NoAlien = 0  //无异形屏
-    const val YesAlien = 1 //有异形屏
+    /**-------------------------------1：获取手机状态栏高度----------------------------**/
 
     /**
-     * 获取屏幕的高度
+     * 获取状态栏高度
+     * @param context
+     * @return 状态栏高度
+     */
+    fun getStatusBarHeight(context: Context): Int {
+        val c: Class<*>
+        val obj: Any
+        val field: Field
+        val x: Int
+        var statusBarHeight = 0
+        try {
+            c = Class.forName("com.android.internal.R\$dimen")
+            obj = c.newInstance()
+            field = c.getField("status_bar_height")
+            x = field[obj].toString().toInt()
+            statusBarHeight = context.resources.getDimensionPixelSize(x)
+        } catch (e1: Exception) {
+            e1.printStackTrace()
+        }
+        return statusBarHeight
+    }
+
+    /**------------------------------:2：判断是不是异形屏幕，同时获取异形屏幕的高度-----------------------------**/
+
+    const val NoAlien = 0  //无异形屏
+
+    /**
+     * 获取异性屏幕的高度
      * @param window
-     * @return 屏幕总高度
+     * @return 0:没有异形屏 ：>0 :具体异形屏幕高度
      */
     fun getSreenAllHeight(window: Window): Int {
-
         //1:判断系统API版本>=28 基本都是使用google的异性屏幕API(如果有特殊的手机也需要判断)
-        if (Build.VERSION.SDK_INT >= 28) {
+        return if (Build.VERSION.SDK_INT >= 28) {
             Log.e("TAG", "getSreenAllHeight: ")
             getIsAlienBygoogle(window)
 
         } else {
             //2:小于28 个别手机厂商还是有异形屏（判断是不是那几个特定的异形屏幕品牌）
+            Log.e("TAG", "API小于28")
+            0
         }
-
-        return 0
     }
 
-    /**
-     * 获取状态栏高度
-     * @param window
-     * @return 状态栏高度
-     */
-    fun getStatusBarHeight(window: Window): Int {
-        return 0
-    }
-
-    /**-------------------------------私有方法-----------------------------**/
 
     /**
+     * 先要判断是否启用异性屏
      * 通过google方法判断是不是异形屏,同时返回异形状态栏高度
      */
     private fun getIsAlienBygoogle(window: Window): Int {
@@ -135,6 +154,7 @@ object BaseSreenUtils {
                             var screenTopMargin = cutout.safeInsetTop
                             var screenBottomMargin = cutout.safeInsetBottom;
 
+                            mHeight = screenTopMargin
                             Log.e("notch", "异形屏数据：$screenTopMargin $screenBottomMargin")
                         }
                     }
@@ -147,28 +167,31 @@ object BaseSreenUtils {
         return mHeight  //返回状态栏高度
     }
 
-    private const val PORTRAIT = 0
-    private const val LANDSCAPE = 1
+    /**------------------------------3：直接获取屏幕高度（不管是否启用异形屏幕）----------------------------------------*/
+
+    private const val PORTRAIT = 0  //竖屏
+    private const val LANDSCAPE = 1 //横屏
 
     @NonNull
     private val mRealSizes: Array<Point?> = arrayOfNulls<Point>(2)
 
-
-    fun getScreenRealHeight(@Nullable context: Context?): Int {
+    /**
+     * 直接拿到屏幕真实尺寸
+     */
+    fun getScreenRealHeight(@Nullable context: Context): Int {
 
         //API小于17的
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1) {
             return getScreenHeight(context)
         }
-        var orientation: Int = context?.resources?.configuration?.orientation
-            ?: context!!.resources.configuration.orientation
+
+        //API17以后含17
+        var orientation: Int = context.resources.configuration.orientation
         orientation = if (orientation == Configuration.ORIENTATION_PORTRAIT) PORTRAIT else LANDSCAPE
 
         if (mRealSizes[orientation] == null) {
             val windowManager: WindowManager =
-                (if (context != null) context.getSystemService(Context.WINDOW_SERVICE) as WindowManager else context
-                    !!.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
-                    ?: return getScreenHeight(context)
+                (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
             val display: Display = windowManager.defaultDisplay
             val point = Point()
             display.getRealSize(point)
@@ -177,48 +200,96 @@ object BaseSreenUtils {
         return mRealSizes[orientation]!!.y
     }
 
-    fun getScreenHeight(@Nullable context: Context?): Int {
-        return if (context != null) {
-            context.getResources().getDisplayMetrics().heightPixels
-        } else 0
+    /**
+     * API小于17屏幕真实尺寸
+     */
+    private fun getScreenHeight(@Nullable context: Context): Int {
+        return context.resources.displayMetrics.heightPixels
     }
 
-    @Volatile
-    private var mHasCheckAllScreen = false
+
+    /**-------------------------------4：判断是不是全面屏手机----------------------------------------*/
+
 
     @Volatile
-    private var mIsAllScreenDevice = false
+    private var mHasCheckAllScreen = false  //是否已经进行过判断
 
+    @Volatile
+    private var mIsAllScreenDevice = false  //是否是全面屏手机
+
+    /**
+     * 判断是否为全面屏手机（依据是高宽比大于1.97）
+     */
     fun isAllScreenDevice(context: Context): Boolean {
         if (mHasCheckAllScreen) {
             return mIsAllScreenDevice
         }
         mHasCheckAllScreen = true
         mIsAllScreenDevice = false
-        // 低于 API 21的，都不会是全面屏。。。
+
+        // 低于 API 21的，都不会是全面屏
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
             return false
         }
         val windowManager: WindowManager =
             context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        if (windowManager != null) {
-            val display: Display = windowManager.getDefaultDisplay()
-            val point = Point()
-            display.getRealSize(point)
-            val width: Float
-            val height: Float
-            if (point.x < point.y) {
-                width = point.x.toFloat()
-                height = point.y.toFloat()
-            } else {
-                width = point.y.toFloat()
-                height = point.x.toFloat()
-            }
-            if (height / width >= 1.97f) {
-                mIsAllScreenDevice = true
-            }
+        val display: Display = windowManager.defaultDisplay
+        val point = Point()
+        display.getRealSize(point)
+        val width: Float
+        val height: Float
+        if (point.x < point.y) {
+            width = point.x.toFloat()
+            height = point.y.toFloat()
+        } else {
+            width = point.y.toFloat()
+            height = point.x.toFloat()
+        }
+        if (height / width >= 1.97f) {
+            mIsAllScreenDevice = true
         }
         return mIsAllScreenDevice
     }
 
+    /**---------------------------------5:通过设置底部导航栏颜色判断是否显示导航栏---------------------------------*/
+
+    private const val NAVIGATION = "navigationBarBackground"
+
+    /**
+     * 判断全面屏是否启用虚拟键盘
+     * @param activity 上下文
+     * @param colorSrcId 底部导航栏颜色(必须设置颜色才能判断是否有显示底部导航栏)
+     */
+    fun isNavigationBarExist(activity: Activity,colorSrcId: Int): Boolean {
+        //设置底部导航栏颜色
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            activity.window.navigationBarColor = ContextCompat.getColor(activity, colorSrcId)
+
+            val vp = activity.window.decorView as ViewGroup
+            for (i in 0 until vp.childCount) {
+                vp.getChildAt(i).context.packageName
+                if (vp.getChildAt(i).id != -1 && NAVIGATION == activity.resources.getResourceEntryName(
+                        vp.getChildAt(i).id
+                    )
+                ) {
+                    return true
+                }
+            }
+        } else {
+            //5.0以下直接返回false
+        }
+        return false
+    }
+
+    /**---------------------------------6:改变底部导航栏背景色---------------------------------*/
+
+
+    /**
+     * 改变底部导航栏颜色（5.0以上起作用）
+     */
+    fun changedNavigationBarBgColor(activity: Activity,colorSrcId: Int){
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            activity.window.navigationBarColor = ContextCompat.getColor(activity, colorSrcId)
+        }
+    }
 }
